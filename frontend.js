@@ -6,13 +6,38 @@ const sampleImages = [
     'https://upload.wikimedia.org/wikipedia/commons/thumb/f/f4/The_Scream.jpg/800px-The_Scream.jpg'
 ];
 
-export const html = `
+export const getHtml = (params = {}) => {
+    const title = params.title || 'Gliche - Digital Image Glitcher';
+    const description = params.description || 'Professional, serverless API and Web App for applying digital glitch effects to images and animated GIFs.';
+    const imageUrl = params.imageUrl || 'https://gliche.constructions-incongrues.net/glitch?url=https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png&amount=50&mode=auto';
+    const siteUrl = params.siteUrl || 'https://gliche.constructions-incongrues.net/';
+
+    return `
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gliche - Image Glitcher</title>
+    
+    <!-- Primary Meta Tags -->
+    <title>\${title}</title>
+    <meta name="title" content="\${title}">
+    <meta name="description" content="\${description}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="\${siteUrl}">
+    <meta property="og:title" content="\${title}">
+    <meta property="og:description" content="\${description}">
+    <meta property="og:image" content="\${imageUrl}">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="\${siteUrl}">
+    <meta property="twitter:title" content="\${title}">
+    <meta property="twitter:description" content="\${description}">
+    <meta property="twitter:image" content="\${imageUrl}">
+
     <style>
         :root {
             --bg: #0a0a0a;
@@ -252,6 +277,21 @@ export const html = `
             urlInput.value = r;
         });
 
+        // Initialize from URL parameters
+        const params = new URLSearchParams(window.location.search);
+        if (params.has('url')) urlInput.value = params.get('url');
+        if (params.has('amount')) {
+            amountInput.value = params.get('amount');
+            amountDisplay.innerText = params.get('amount');
+        }
+        if (params.has('mode')) modeInput.value = params.get('mode');
+        if (params.has('seed')) seedInput.value = params.get('seed');
+
+        // Auto-glitch if URL is provided
+        if (params.has('url')) {
+            window.addEventListener('load', () => glitchBtn.click());
+        }
+
         glitchBtn.addEventListener('click', async () => {
             const url = urlInput.value;
             if(!url) return alert('ENTER URL');
@@ -259,6 +299,15 @@ export const html = `
             const amount = amountInput.value;
             const seed = seedInput.value;
             const mode = modeInput.value;
+
+            // Update URL for shareability
+            const newUrl = new URL(window.location.href);
+            newUrl.searchParams.set('url', url);
+            newUrl.searchParams.set('amount', amount);
+            newUrl.searchParams.set('mode', mode);
+            if (seed) newUrl.searchParams.set('seed', seed);
+            else newUrl.searchParams.delete('seed');
+            window.history.pushState({}, '', newUrl);
 
             loading.style.display = 'block';
             resultImage.style.display = 'none';
@@ -302,4 +351,5 @@ export const html = `
     </script>
 </body>
 </html>
-`;
+    `;
+};

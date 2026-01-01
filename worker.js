@@ -1,5 +1,5 @@
 import { glitch } from './glitcher.js';
-import { html } from './frontend.js';
+import { getHtml } from './frontend.js';
 
 export default {
     async fetch(request, env, ctx) {
@@ -11,7 +11,19 @@ export default {
 
         // Serve Frontend
         if (url.pathname === '/') {
-            return new Response(html, {
+            const baseUrl = `\${url.protocol}//\${url.host}`;
+            let ogImageUrl = `\${baseUrl}/glitch?url=\${encodeURIComponent('https://upload.wikimedia.org/wikipedia/commons/4/47/PNG_transparency_demonstration_1.png')}&amount=50&mode=auto`;
+            if (targetUrl) {
+                // If a URL is provided in the query, use it as the OG image (glitched)
+                ogImageUrl = `\${baseUrl}/glitch?url=\${encodeURIComponent(targetUrl)}&amount=\${amountStr}&mode=\${mode}\${seed ? '&seed=' + encodeURIComponent(seed) : ''}`;
+            }
+
+            return new Response(getHtml({
+                imageUrl: ogImageUrl,
+                title: targetUrl ? 'Gliche - Glitched Image' : 'Gliche - Digital Image Glitcher',
+                description: targetUrl ? `Check out this glitched version of \${targetUrl}` : undefined,
+                siteUrl: url.toString()
+            }), {
                 headers: { 'Content-Type': 'text/html' }
             });
         }
