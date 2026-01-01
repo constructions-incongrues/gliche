@@ -1,0 +1,22 @@
+name = "gliche"
+main = "worker.js"
+compatibility_date = "2024-09-23"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+CACHE_TTL = 3600
+
+[[routes]]
+pattern = "gliche.constructions-incongrues.net"
+custom_domain = true
+
+[[routes]]
+pattern = "gliche.musiqueapproximative.net"
+custom_domain = true
+
+[observability]
+[observability.logs]
+enabled = false
+head_sampling_rate = 1
+invocation_logs = true
+persist = true
