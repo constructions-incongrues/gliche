@@ -37,7 +37,7 @@ function createRng(seed) {
  * @returns {Promise<Uint8Array>} - Glitched buffer
  */
 export async function glitch(buffer, contentType, amount, seed, mode = 'auto') {
-    if (amount <= 0) return buffer;
+    if (amount <= 0 && mode !== 'rotate') return buffer;
 
     const rng = createRng(seed);
 
@@ -66,12 +66,22 @@ export async function glitch(buffer, contentType, amount, seed, mode = 'auto') {
 }
 
 function glitchJpeg(buffer, amount, mode, rng) {
-    const raw = jpeg.decode(buffer, { useTArray: true });
+    let raw = jpeg.decode(buffer, { useTArray: true });
 
     // Safety Check: Dimensions
     if (raw.width * raw.height > MAX_PIXELS) {
         console.warn(`JPEG too large (${raw.width}x${raw.height}). Falling back to naive glitch.`);
         return naiveGlitch(buffer, amount, rng);
+    }
+
+    if (mode === 'auto' || mode === 'rotate') {
+        if (rng() > 0.5 || mode === 'rotate') {
+            const steps = Math.floor(rng() * 3) + 1;
+            const rotated = rotate(raw.data, raw.width, raw.height, steps);
+            raw.data = rotated.data;
+            raw.width = rotated.width;
+            raw.height = rotated.height;
+        }
     }
 
     manipulatePixels(raw.data, raw.width, raw.height, amount, mode, rng);
@@ -91,6 +101,16 @@ function glitchPng(buffer, amount, mode, rng) {
                 console.warn(`PNG too large (${data.width}x${data.height}). Falling back to naive glitch.`);
                 resolve(naiveGlitch(buffer, amount, rng));
                 return;
+            }
+
+            if (mode === 'auto' || mode === 'rotate') {
+                if (rng() > 0.5 || mode === 'rotate') {
+                    const steps = Math.floor(rng() * 3) + 1;
+                    const rotated = rotate(data.data, data.width, data.height, steps);
+                    data.data = rotated.data;
+                    data.width = rotated.width;
+                    data.height = rotated.height;
+                }
             }
 
             manipulatePixels(data.data, data.width, data.height, amount, mode, rng);
@@ -116,9 +136,23 @@ function glitchGif(buffer, amount, mode, rng) {
 
         // Output buffer: allocate enough space
         const outputBuffer = new Uint8Array(buffer.length * 3 + 2 * 1024 * 1024);
-        const writer = new GifWriter(outputBuffer, width, height, { loop: reader.loopCount() });
-
         const frameInfo = new Uint8Array(width * height * 4);
+
+        // Random rotation for the whole GIF
+        let steps = 0;
+        let currentWidth = width;
+        let currentHeight = height;
+        if (mode === 'auto' || mode === 'rotate') {
+            if (rng() > 0.5 || mode === 'rotate') {
+                steps = Math.floor(rng() * 3) + 1;
+                if (steps % 2 !== 0) {
+                    currentWidth = height;
+                    currentHeight = width;
+                }
+            }
+        }
+
+        const writer = new GifWriter(outputBuffer, currentWidth, currentHeight, { loop: reader.loopCount() });
 
         for (let k = 0; k < numFrames; k++) {
             const frame = reader.frameInfo(k);
@@ -126,9 +160,14 @@ function glitchGif(buffer, amount, mode, rng) {
             // 1. Decode frame to RGBA
             reader.decodeAndBlitFrameRGBA(k, frameInfo);
 
-            // 2. Glitch (Randomly skip frames to keep animation smooth-ish but glitchy)
+            // 2. Glitch & Rotate
+            let processedFrame = { data: frameInfo, width: width, height: height };
+            if (steps > 0) {
+                processedFrame = rotate(frameInfo, width, height, steps);
+            }
+
             if (rng() > 0.3) {
-                manipulatePixels(frameInfo, width, height, amount, mode, rng);
+                manipulatePixels(processedFrame.data, processedFrame.width, processedFrame.height, amount, mode, rng);
             }
 
             // 3. Extract Palette
@@ -167,11 +206,11 @@ function glitchGif(buffer, amount, mode, rng) {
                 }
             }
 
-            const pixels = new Uint8Array(width * height);
-            for (let i = 0; i < width * height; i++) {
-                const r = frameInfo[i * 4];
-                const g = frameInfo[i * 4 + 1];
-                const b = frameInfo[i * 4 + 2];
+            const pixels = new Uint8Array(processedFrame.width * processedFrame.height);
+            for (let i = 0; i < processedFrame.width * processedFrame.height; i++) {
+                const r = processedFrame.data[i * 4];
+                const g = processedFrame.data[i * 4 + 1];
+                const b = processedFrame.data[i * 4 + 2];
                 const key = (r << 16) | (g << 8) | b;
                 let idx = reversePalette.get(key);
 
@@ -182,7 +221,7 @@ function glitchGif(buffer, amount, mode, rng) {
                 pixels[i] = idx;
             }
 
-            writer.addFrame(frame.x, frame.y, frame.width, frame.height, pixels, {
+            writer.addFrame(0, 0, processedFrame.width, processedFrame.height, pixels, {
                 palette: palette,
                 delay: frame.delay,
                 disposal: frame.disposal,
@@ -289,4 +328,41 @@ function naiveGlitch(buffer, amount, rng) {
         }
     }
     return newBuffer;
+}
+
+/**
+ * Rotates RGBA pixel data in 90-degree increments
+ */
+function rotate(data, width, height, steps) {
+    steps = steps % 4;
+    if (steps === 0) return { data, width, height };
+
+    let currentData = data;
+    let currentWidth = width;
+    let currentHeight = height;
+
+    for (let s = 0; s < steps; s++) {
+        const nextWidth = currentHeight;
+        const nextHeight = currentWidth;
+        const newData = new Uint8Array(currentData.length);
+
+        for (let y = 0; y < currentHeight; y++) {
+            for (let x = 0; x < currentWidth; x++) {
+                const oldIdx = (y * currentWidth + x) * 4;
+                const newX = currentHeight - 1 - y;
+                const newY = x;
+                const newIdx = (newY * nextWidth + newX) * 4;
+
+                newData[newIdx] = currentData[oldIdx];
+                newData[newIdx + 1] = currentData[oldIdx + 1];
+                newData[newIdx + 2] = currentData[oldIdx + 2];
+                newData[newIdx + 3] = currentData[oldIdx + 3];
+            }
+        }
+        currentData = newData;
+        currentWidth = nextWidth;
+        currentHeight = nextHeight;
+    }
+
+    return { data: currentData, width: currentWidth, height: currentHeight };
 }

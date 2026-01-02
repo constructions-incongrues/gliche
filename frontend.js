@@ -232,6 +232,7 @@ export const getHtml = (params = {}) => {
                         <option value="sort">PIXEL SORT</option>
                         <option value="shift">CHANNEL SHIFT</option>
                         <option value="invert">INVERT</option>
+                        <option value="rotate">ROTATE</option>
                     </select>
                 </div>
             </div>
